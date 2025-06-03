@@ -3,8 +3,8 @@ from typing import Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str = "postgresql://user:password@localhost/bonhoeffer_db"
+    # Database - Use SQLite for Vercel
+    DATABASE_URL: str = "sqlite:///./crm_db.sqlite"
     
     # JWT
     SECRET_KEY: str = "bonhoeffer-secret-key-change-in-production"
@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list = [
         "http://localhost:3000", 
         "http://127.0.0.1:3000",
+        "https://crm.nakul.click",  # Your frontend domain
         "https://*.vercel.app",
         "https://*.ngrok.io",
         "https://*.ngrok-free.app"

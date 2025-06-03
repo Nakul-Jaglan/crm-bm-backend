@@ -420,11 +420,40 @@ async def update_user(
 
 @app.get("/")
 async def root():
-    return {"message": "Bonhoeffer Machines CRM API"}
+    return {"message": "Bonhoeffer Machines CRM API", "status": "running"}
+
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint for debugging"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "database_url": "configured" if settings.DATABASE_URL else "not configured"
+    }
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup"""
+    try:
+        from database import engine, Base
+        # Create tables if they don't exist
+        Base.metadata.create_all(bind=engine)
+        
+        # Try to seed data if database is empty
+        try:
+            from seed_data import create_sample_data
+            create_sample_data()
+        except Exception as seed_error:
+            print(f"Seed data already exists or error: {seed_error}")
+            
+        print("Database initialized successfully")
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+        # Don't raise the error, let the app continue
+
+# Vercel handler - this is what Vercel will call
+handler = app
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-# Vercel handler
-handler = app
