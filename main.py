@@ -13,7 +13,7 @@ import requests
 import re
 
 import schemas
-from database import get_db, User, Lead, Assignment, PreLead
+from database import get_db, User, Lead, Assignment, PreLead, engine, Base
 from auth import (
     authenticate_user, create_access_token, get_current_active_user,
     get_password_hash, get_user_by_email
@@ -22,6 +22,36 @@ from utils import sort_salespeople_by_distance
 from config import settings
 
 app = FastAPI(title="Bonhoeffer Machines CRM API", version="1.0.0")
+
+# Initialize database on startup
+@app.on_event("startup")
+def startup_event():
+    """Initialize database and seed data if needed"""
+    try:
+        # Create all tables
+        Base.metadata.create_all(bind=engine)
+        print("✅ Database tables created/verified")
+        
+        # Check if we need to seed data
+        db = next(get_db())
+        try:
+            user_count = db.query(User).count()
+            if user_count == 0:
+                print("🌱 No users found. Seeding initial data...")
+                # Import and run seed function
+                from seed_data import main as seed_main
+                seed_main()
+                print("✅ Initial data seeded successfully!")
+            else:
+                print(f"👥 Found {user_count} users. Database already initialized.")
+        finally:
+            db.close()
+            
+    except Exception as e:
+        print(f"❌ Database initialization error: {e}")
+        # Don't fail the startup, but log the error
+        import traceback
+        traceback.print_exc()
 
 # Create uploads directory if it doesn't exist
 uploads_dir = Path("uploads")
@@ -43,6 +73,32 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "environment": settings.ENVIRONMENT}
+
+# Seed database endpoint (for manual seeding if needed)
+@app.post("/seed-database")
+async def seed_database(db: Session = Depends(get_db)):
+    """Manually seed the database with initial data"""
+    try:
+        user_count = db.query(User).count()
+        if user_count > 0:
+            return {"message": f"Database already has {user_count} users. Skipping seed."}
+        
+        # Import and run seed function
+        from seed_data import main as seed_main
+        seed_main()
+        
+        # Verify seeding worked
+        new_user_count = db.query(User).count()
+        return {
+            "message": "Database seeded successfully!",
+            "users_created": new_user_count
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to seed database: {str(e)}"
+        )
 
 # Auth endpoints
 @app.post("/login", response_model=schemas.Token)
