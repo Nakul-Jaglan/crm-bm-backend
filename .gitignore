@@ -137,7 +137,8 @@ ehthumbs.db
 Thumbs.db
 
 # Uploads directory (user-generated content)
-uploads/
+uploads/*
+!uploads/.gitkeep
 *.jpg
 *.jpeg
 *.png

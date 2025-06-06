@@ -23,6 +23,10 @@ from config import settings
 
 app = FastAPI(title="Bonhoeffer Machines CRM API", version="1.0.0")
 
+# Create uploads directory if it doesn't exist
+uploads_dir = Path("uploads")
+uploads_dir.mkdir(exist_ok=True)
+
 # Mount static files for uploaded images
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
