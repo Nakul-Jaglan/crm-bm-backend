@@ -10,7 +10,7 @@ import random
 # Add the backend directory to the path
 sys.path.append(os.path.dirname(__file__))
 
-from database import SessionLocal, User, Lead, Assignment
+from database import SessionLocal, User, Lead, Assignment, PreLead
 from auth import get_password_hash
 
 def create_demo_users(db):
@@ -142,7 +142,7 @@ def create_demo_leads(db):
             "latitude": 28.6304,
             "longitude": 77.2177,
             "status": "new",
-            "priority": "high",
+            "priority": "hot",
             "estimated_value": 500000.00,
             "notes": "Interested in industrial automation solutions"
         },
@@ -155,7 +155,7 @@ def create_demo_leads(db):
             "latitude": 19.1136,
             "longitude": 72.8697,
             "status": "contacted",
-            "priority": "medium",
+            "priority": "warm",
             "estimated_value": 750000.00,
             "notes": "Looking for packaging automation"
         },
@@ -168,7 +168,7 @@ def create_demo_leads(db):
             "latitude": 12.8456,
             "longitude": 77.6603,
             "status": "new",
-            "priority": "high",
+            "priority": "hot",
             "estimated_value": 1200000.00,
             "notes": "Enterprise automation project"
         },
@@ -181,7 +181,7 @@ def create_demo_leads(db):
             "latitude": 22.5858,
             "longitude": 88.4026,
             "status": "qualified",
-            "priority": "medium",
+            "priority": "warm",
             "estimated_value": 300000.00,
             "notes": "Small scale automation requirements"
         },
@@ -194,7 +194,7 @@ def create_demo_leads(db):
             "latitude": 23.0522,
             "longitude": 72.6311,
             "status": "new",
-            "priority": "high",
+            "priority": "hot",
             "estimated_value": 2000000.00,
             "notes": "Large industrial automation project"
         },
@@ -207,7 +207,7 @@ def create_demo_leads(db):
             "latitude": 13.1185,
             "longitude": 80.1574,
             "status": "contacted", 
-            "priority": "medium",
+            "priority": "warm",
             "estimated_value": 450000.00,
             "notes": "Automotive assembly line automation"
         },
@@ -220,7 +220,7 @@ def create_demo_leads(db):
             "latitude": 17.4435,
             "longitude": 78.3772,
             "status": "proposal_sent",
-            "priority": "high",
+            "priority": "hot",
             "estimated_value": 800000.00,
             "notes": "Pharmaceutical packaging automation"
         },
@@ -233,7 +233,7 @@ def create_demo_leads(db):
             "latitude": 18.6278,
             "longitude": 73.8131,
             "status": "new",
-            "priority": "low", 
+            "priority": "cold", 
             "estimated_value": 200000.00,
             "notes": "Basic automation requirements"
         }
@@ -311,6 +311,105 @@ def create_demo_assignments(db, users, leads):
     db.commit()
     return created_assignments
 
+def create_demo_preleads(db, users):
+    """Create demo pre-leads for testing"""
+    # Get CRM user for created_by field
+    crm_user = next((user for user in users if user.role == 'crm'), users[0])
+    
+    preleads_data = [
+        {
+            "company_name": "Global Tech Industries",
+            "country": "India",
+            "reason": "Expanding manufacturing operations, need automation solutions",
+            "source": "trade_show",
+            "classification": "hot",
+            "notes": "Met at Industrial Automation Expo 2025, very interested in our robotic solutions"
+        },
+        {
+            "company_name": "European Manufacturing Solutions",
+            "country": "Germany",
+            "reason": "Digitization of legacy manufacturing systems",
+            "source": "referral",
+            "classification": "warm",
+            "notes": "Referred by existing client, scheduled for initial call next week"
+        },
+        {
+            "company_name": "Asia Pacific Textiles",
+            "country": "Bangladesh",
+            "reason": "Modernizing textile production line",
+            "source": "website",
+            "classification": "cold",
+            "notes": "Filled contact form on website, requested product brochure"
+        },
+        {
+            "company_name": "Nordic Engineering AB",
+            "country": "Sweden",
+            "reason": "Green energy integration with manufacturing",
+            "source": "linkedin",
+            "classification": "warm",
+            "notes": "Connected via LinkedIn, interested in sustainable automation solutions"
+        },
+        {
+            "company_name": "Middle East Industrial Corp",
+            "country": "UAE",
+            "reason": "Setting up new facility, need complete automation",
+            "source": "cold_call",
+            "classification": "hot",
+            "notes": "Urgent requirement, budget approved, decision expected within 2 weeks"
+        },
+        {
+            "company_name": "South American Metals Ltd",
+            "country": "Brazil",
+            "reason": "Upgrading mining equipment automation",
+            "source": "trade_show",
+            "classification": "warm",
+            "notes": "Met at Mining Technology Conference, interested in our control systems"
+        },
+        {
+            "company_name": "African Processing Solutions",
+            "country": "South Africa",
+            "reason": "Food processing automation upgrade",
+            "source": "email_campaign",
+            "classification": "cold",
+            "notes": "Responded to our email campaign, requested technical specifications"
+        },
+        {
+            "company_name": "Pacific Manufacturing Inc",
+            "country": "Australia",
+            "reason": "Smart factory implementation",
+            "source": "referral",
+            "classification": "hot",
+            "notes": "Referred by local partner, ready to move forward quickly"
+        }
+    ]
+    
+    created_preleads = []
+    for prelead_data in preleads_data:
+        # Check if pre-lead already exists
+        existing_prelead = db.query(PreLead).filter(
+            PreLead.company_name == prelead_data["company_name"]
+        ).first()
+        if existing_prelead:
+            print(f"Pre-lead {prelead_data['company_name']} already exists, skipping...")
+            created_preleads.append(existing_prelead)
+            continue
+            
+        prelead = PreLead(
+            company_name=prelead_data["company_name"],
+            country=prelead_data["country"],
+            reason=prelead_data["reason"],
+            source=prelead_data["source"],
+            classification=prelead_data["classification"],
+            notes=prelead_data["notes"],
+            created_by=crm_user.id
+        )
+        db.add(prelead)
+        created_preleads.append(prelead)
+        print(f"Created pre-lead: {prelead_data['company_name']} ({prelead_data['country']})")
+    
+    db.commit()
+    return created_preleads
+
 def main():
     """Main seeding function"""
     print("🌱 Seeding database with demo data...")
@@ -325,6 +424,10 @@ def main():
         print("\n🎯 Creating demo leads...")
         leads = create_demo_leads(db)
         
+        # Create demo pre-leads
+        print("\n🔥 Creating demo pre-leads...")
+        preleads = create_demo_preleads(db, users)
+        
         # Create demo assignments
         print("\n📋 Creating demo assignments...")
         assignments = create_demo_assignments(db, users, leads)
@@ -332,6 +435,7 @@ def main():
         print(f"\n✅ Database seeded successfully!")
         print(f"   - Created {len(users)} users")
         print(f"   - Created {len(leads)} leads")
+        print(f"   - Created {len(preleads)} pre-leads")
         print(f"   - Created {len(assignments)} assignments")
         
         print("\n🔑 Demo login credentials:")

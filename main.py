@@ -13,7 +13,7 @@ import requests
 import re
 
 import schemas
-from database import get_db, User, Lead, Assignment
+from database import get_db, User, Lead, Assignment, PreLead
 from auth import (
     authenticate_user, create_access_token, get_current_active_user,
     get_password_hash, get_user_by_email
@@ -23,12 +23,8 @@ from config import settings
 
 app = FastAPI(title="Bonhoeffer Machines CRM API", version="1.0.0")
 
-# Mount static files for uploaded images (create directory if it doesn't exist)
-import os
-uploads_dir = "uploads"
-if not os.path.exists(uploads_dir):
-    os.makedirs(uploads_dir)
-app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+# Mount static files for uploaded images
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # CORS middleware
 app.add_middleware(
@@ -38,6 +34,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Health check endpoint for Render
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "environment": settings.ENVIRONMENT}
 
 # Auth endpoints
 @app.post("/login", response_model=schemas.Token)
@@ -270,6 +271,31 @@ async def get_leads(
 ):
     return db.query(Lead).offset(skip).limit(limit).all()
 
+# DELETE endpoint for lead deletion
+@app.delete("/leads/{lead_id}")
+async def delete_lead(
+    lead_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Delete a lead - Available to CRM and Admin users"""
+    if current_user.role not in ["crm", "admin"]:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    # Check if lead exists
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Delete associated assignments first
+    db.query(Assignment).filter(Assignment.lead_id == lead_id).delete()
+    
+    # Delete the lead
+    db.delete(lead)
+    db.commit()
+    
+    return {"message": f"Lead {lead_id} deleted successfully"}
+
 # Assignment endpoints
 @app.post("/assign", response_model=schemas.Assignment)
 async def assign_lead_to_salesperson(
@@ -322,6 +348,51 @@ async def get_assignments(
         return db.query(Assignment).filter(Assignment.salesperson_id == current_user.id).all()
     else:
         return db.query(Assignment).all()
+
+@app.put("/assignments/{assignment_id}", response_model=schemas.Assignment)
+async def update_assignment_status(
+    assignment_id: int,
+    status_update: schemas.AssignmentStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    # Get the assignment
+    assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    # Check permissions - salesperson can only update their own assignments
+    if current_user.role == "salesperson" and assignment.salesperson_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Can only update your own assignments")
+    elif current_user.role not in ["salesperson", "crm", "admin"]:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    # Validate status values
+    valid_statuses = ["pending", "accepted", "in_progress", "completed", "rejected"]
+    if status_update.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+    
+    # Update assignment
+    assignment.status = status_update.status
+    if status_update.notes:
+        assignment.notes = status_update.notes
+    
+    # Update completion timestamp if status is completed
+    if status_update.status == "completed":
+        assignment.completed_at = datetime.utcnow()
+        # Update salesperson status back to available
+        salesperson = db.query(User).filter(User.id == assignment.salesperson_id).first()
+        if salesperson:
+            salesperson.status = "available"
+    elif status_update.status == "in_progress":
+        # Update salesperson status to busy
+        salesperson = db.query(User).filter(User.id == assignment.salesperson_id).first()
+        if salesperson:
+            salesperson.status = "busy"
+    
+    db.commit()
+    db.refresh(assignment)
+    return assignment
 
 # Admin and HR user management endpoints
 @app.post("/admin/users", response_model=schemas.User)
@@ -418,41 +489,83 @@ async def update_user(
     
     return user
 
+# Pre-lead management endpoints
+@app.post("/pre-leads", response_model=schemas.PreLead)
+async def create_pre_lead(
+    pre_lead: schemas.PreLeadCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if current_user.role not in ["crm", "admin"]:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    from database import PreLead
+    db_pre_lead = PreLead(
+        **pre_lead.dict(),
+        created_by=current_user.id
+    )
+    db.add(db_pre_lead)
+    db.commit()
+    db.refresh(db_pre_lead)
+    return db_pre_lead
+
+@app.get("/pre-leads", response_model=List[schemas.PreLead])
+async def get_pre_leads(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    from database import PreLead
+    return db.query(PreLead).offset(skip).limit(limit).all()
+
+@app.post("/pre-leads/{pre_lead_id}/convert", response_model=schemas.Lead)
+async def convert_pre_lead_to_lead(
+    pre_lead_id: int,
+    convert_data: schemas.PreLeadToLeadConvert,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if current_user.role not in ["crm", "admin"]:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    from database import PreLead
+    # Get the pre-lead
+    pre_lead = db.query(PreLead).filter(PreLead.id == pre_lead_id).first()
+    if not pre_lead:
+        raise HTTPException(status_code=404, detail="Pre-lead not found")
+    
+    if pre_lead.converted_to_lead_id:
+        raise HTTPException(status_code=400, detail="Pre-lead already converted")
+    
+    # Create the lead from pre-lead and convert data
+    db_lead = Lead(
+        company_name=pre_lead.company_name,
+        contact_person=convert_data.contact_person,
+        phone=convert_data.phone,
+        email=convert_data.email,
+        address=convert_data.address,
+        latitude=convert_data.latitude,
+        longitude=convert_data.longitude,
+        priority=convert_data.priority,
+        estimated_value=convert_data.estimated_value,
+        notes=f"Converted from pre-lead. Original reason: {pre_lead.reason}. Original source: {pre_lead.source}. Original classification: {pre_lead.classification}. {convert_data.notes or ''}",
+        created_by=current_user.id
+    )
+    db.add(db_lead)
+    db.commit()
+    db.refresh(db_lead)
+    
+    # Update pre-lead to mark as converted
+    pre_lead.converted_to_lead_id = db_lead.id
+    pre_lead.converted_at = datetime.utcnow()
+    db.commit()
+    
+    return db_lead
+
 @app.get("/")
 async def root():
-    return {"message": "Bonhoeffer Machines CRM API", "status": "running"}
-
-@app.get("/health")
-async def health_check():
-    """Simple health check endpoint for debugging"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "database_url": "configured" if settings.DATABASE_URL else "not configured"
-    }
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup"""
-    try:
-        from database import engine, Base
-        # Create tables if they don't exist
-        Base.metadata.create_all(bind=engine)
-        
-        # Try to seed data if database is empty
-        try:
-            from seed_data import create_sample_data
-            create_sample_data()
-        except Exception as seed_error:
-            print(f"Seed data already exists or error: {seed_error}")
-            
-        print("Database initialized successfully")
-    except Exception as e:
-        print(f"Database initialization error: {e}")
-        # Don't raise the error, let the app continue
-
-# Vercel handler - this is what Vercel will call
-handler = app
+    return {"message": "Bonhoeffer Machines CRM API"}
 
 if __name__ == "__main__":
     import uvicorn

@@ -3,16 +3,22 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.sql import func
 from datetime import datetime
+import os
 
 from config import settings
 
-# Configure engine for SQLite with proper settings for Vercel
-if settings.DATABASE_URL.startswith("sqlite"):
+# Configure engine based on environment
+if settings.ENVIRONMENT == "production":
+    # Production configuration with connection pooling
     engine = create_engine(
         settings.DATABASE_URL,
-        connect_args={"check_same_thread": False}
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=300
     )
 else:
+    # Development configuration
     engine = create_engine(settings.DATABASE_URL)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -54,7 +60,7 @@ class Lead(Base):
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
     status = Column(String, default="unassigned")  # 'unassigned', 'assigned', 'contacted', 'closed'
-    priority = Column(String, default="medium")  # 'low', 'medium', 'high'
+    priority = Column(String, default="warm")  # 'hot', 'warm', 'cold'
     estimated_value = Column(Float)
     notes = Column(Text)
     created_by = Column(Integer, ForeignKey("users.id"))
@@ -77,6 +83,25 @@ class Assignment(Base):
     # Relationships
     lead = relationship("Lead", back_populates="assignments")
     salesperson = relationship("User", back_populates="assignments", foreign_keys=[salesperson_id])
+
+class PreLead(Base):
+    __tablename__ = "pre_leads"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    company_name = Column(String, nullable=False)
+    country = Column(String, nullable=False)
+    reason = Column(Text, nullable=False)  # Reason for prospecting
+    source = Column(String, nullable=False)  # Source of the lead (referral, cold call, etc.)
+    classification = Column(String, default="warm")  # 'hot', 'warm', 'cold'
+    notes = Column(Text)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=func.now())
+    converted_to_lead_id = Column(Integer, ForeignKey("leads.id"), nullable=True)  # Track if converted
+    converted_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    creator = relationship("User", foreign_keys=[created_by])
+    converted_lead = relationship("Lead", foreign_keys=[converted_to_lead_id])
 
 def get_db():
     db = SessionLocal()

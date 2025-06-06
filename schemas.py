@@ -62,7 +62,7 @@ class LeadBase(BaseModel):
     address: Optional[str] = None
     latitude: float
     longitude: float
-    priority: str = "medium"
+    priority: str = "warm"
     estimated_value: Optional[float] = None
     notes: Optional[str] = None
 
@@ -82,6 +82,10 @@ class Lead(LeadBase):
 class AssignmentCreate(BaseModel):
     lead_id: int
     salesperson_id: int
+    notes: Optional[str] = None
+
+class AssignmentStatusUpdate(BaseModel):
+    status: str
     notes: Optional[str] = None
 
 class Assignment(BaseModel):
@@ -124,3 +128,36 @@ class SalespersonWithDistance(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Pre-lead schemas
+class PreLeadBase(BaseModel):
+    company_name: str
+    country: str
+    reason: str
+    source: str
+    classification: str = "warm"  # 'hot', 'warm', 'cold'
+    notes: Optional[str] = None
+
+class PreLeadCreate(PreLeadBase):
+    pass
+
+class PreLead(PreLeadBase):
+    id: int
+    created_by: Optional[int] = None
+    created_at: datetime
+    converted_to_lead_id: Optional[int] = None
+    converted_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class PreLeadToLeadConvert(BaseModel):
+    contact_person: str
+    phone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    address: Optional[str] = None
+    latitude: float
+    longitude: float
+    priority: str = "warm"
+    estimated_value: Optional[float] = None
+    notes: Optional[str] = None
