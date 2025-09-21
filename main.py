@@ -37,24 +37,48 @@ def startup_event():
         Base.metadata.create_all(bind=engine)
         print("✅ Database tables created/verified")
         
-        # Check if we need to seed data (but don't hang if it fails)
-        try:
-            db = next(get_db())
+        # Check if we need to seed data with retry logic
+        import time
+        for attempt in range(3):  # Try up to 3 times
             try:
-                user_count = db.query(User).count()
-                if user_count == 0:
-                    print("🌱 No users found. Seeding initial data...")
-                    # Import and run seed function
-                    from seed_data import main as seed_main
-                    seed_main()
-                    print("✅ Initial data seeded successfully!")
+                # Use a fresh session for seeding
+                from sqlalchemy.orm import sessionmaker
+                SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+                db = SessionLocal()
+                
+                try:
+                    user_count = db.query(User).count()
+                    if user_count == 0:
+                        print(f"🌱 No users found (attempt {attempt + 1}/3). Seeding initial data...")
+                        db.close()  # Close before seeding
+                        
+                        # Import and run seed function
+                        from seed_data import main as seed_main
+                        seed_main()
+                        print("✅ Initial data seeded successfully!")
+                        break
+                    else:
+                        print(f"👥 Found {user_count} users. Database already initialized.")
+                        break
+                        
+                except Exception as query_error:
+                    print(f"⚠️ Query error on attempt {attempt + 1}: {query_error}")
+                    if attempt < 2:  # Not the last attempt
+                        time.sleep(2)  # Wait 2 seconds before retrying
+                        continue
+                    else:
+                        raise query_error
+                finally:
+                    db.close()
+                    
+            except Exception as seed_error:
+                print(f"⚠️ Seeding error on attempt {attempt + 1}: {seed_error}")
+                if attempt < 2:  # Not the last attempt
+                    time.sleep(5)  # Wait 5 seconds before retrying
+                    continue
                 else:
-                    print(f"👥 Found {user_count} users. Database already initialized.")
-            finally:
-                db.close()
-        except Exception as seed_error:
-            print(f"⚠️ Seeding warning: {seed_error}")
-            print("🚀 Application will start without initial data")
+                    print("❌ Failed to seed after 3 attempts. Application will start without initial data")
+                    break
             
     except Exception as e:
         print(f"❌ Database initialization error: {e}")

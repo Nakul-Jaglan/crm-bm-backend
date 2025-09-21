@@ -414,7 +414,26 @@ def main():
     """Main seeding function"""
     print("🌱 Seeding database with demo data...")
     
-    db = SessionLocal()
+    # Use a new session with longer timeout
+    from sqlalchemy import create_engine
+    from config import settings
+    
+    # Create a dedicated engine for seeding with longer timeouts
+    seed_engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args={
+            "check_same_thread": False,
+            "timeout": 120,  # 2 minute timeout for seeding
+            "isolation_level": None,
+        },
+        pool_timeout=120,  # Wait up to 2 minutes for a connection
+        echo=False
+    )
+    
+    from sqlalchemy.orm import sessionmaker
+    SeedSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=seed_engine)
+    
+    db = SeedSessionLocal()
     try:
         # Create demo users
         print("\n👥 Creating demo users...")

@@ -16,14 +16,15 @@ if settings.ENVIRONMENT == "production":
             # SQLite-specific optimizations
             connect_args={
                 "check_same_thread": False,  # Allow multiple threads
-                "timeout": 30,  # 30 second timeout for writes
+                "timeout": 60,  # Increased timeout for writes
                 "isolation_level": None,  # Autocommit mode
             },
-            # Connection pooling (limited for SQLite)
-            pool_size=1,  # SQLite only supports one writer
-            max_overflow=0,  # No overflow for SQLite
+            # Connection pooling (optimized for SQLite)
+            pool_size=5,  # Allow multiple connections for reading
+            max_overflow=10,  # Allow overflow connections
             pool_pre_ping=True,
             pool_recycle=3600,  # Recycle connections every hour
+            pool_timeout=60,  # Wait up to 60 seconds for a connection
             # Performance optimizations
             echo=False  # Set to True for debugging
         )
