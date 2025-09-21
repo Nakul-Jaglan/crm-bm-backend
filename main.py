@@ -28,6 +28,10 @@ app = FastAPI(title="Bonhoeffer Machines CRM API", version="1.0.0")
 def startup_event():
     """Initialize database and seed data if needed"""
     try:
+        # Ensure data directory exists for SQLite
+        import os
+        os.makedirs("data", exist_ok=True)
+        
         # Create all tables
         Base.metadata.create_all(bind=engine)
         print("✅ Database tables created/verified")

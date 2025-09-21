@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     # Database Configuration
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL", 
-        "postgresql+psycopg://bonhoeffer_user:securepassword123@localhost/bonhoeffer_db"
+        "sqlite:///./data/crm_production.sqlite3"
     )
     
     # JWT Configuration
