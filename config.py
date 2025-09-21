@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     # Database Configuration
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL", 
-        "postgresql://bonhoeffer_user:securepassword123@localhost/bonhoeffer_db"
+        "postgresql+psycopg://bonhoeffer_user:securepassword123@localhost/bonhoeffer_db"
     )
     
     # JWT Configuration
@@ -17,15 +17,17 @@ class Settings(BaseSettings):
     # Environment
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     
+    # Frontend URL
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "https://localhost:3000")
+    
     # CORS Origins
     @property
     def CORS_ORIGINS(self) -> list:
         if self.ENVIRONMENT == "production":
-            frontend_url = os.getenv("FRONTEND_URL", "")
             return [
                 "http://localhost:3000",  # Keep for local testing
                 "http://127.0.0.1:3000",
-                frontend_url,
+                self.FRONTEND_URL,
                 "https://*.vercel.app",
                 "https://crm.nakul.click",
             ]

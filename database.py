@@ -9,17 +9,54 @@ from config import settings
 
 # Configure engine based on environment
 if settings.ENVIRONMENT == "production":
-    # Production configuration with connection pooling
-    engine = create_engine(
-        settings.DATABASE_URL,
-        pool_size=10,
-        max_overflow=20,
-        pool_pre_ping=True,
-        pool_recycle=300
-    )
+    if settings.DATABASE_URL.startswith("sqlite"):
+        # Optimized SQLite configuration for production
+        engine = create_engine(
+            settings.DATABASE_URL,
+            # SQLite-specific optimizations
+            connect_args={
+                "check_same_thread": False,  # Allow multiple threads
+                "timeout": 30,  # 30 second timeout for writes
+                "isolation_level": None,  # Autocommit mode
+            },
+            # Connection pooling (limited for SQLite)
+            pool_size=1,  # SQLite only supports one writer
+            max_overflow=0,  # No overflow for SQLite
+            pool_pre_ping=True,
+            pool_recycle=3600,  # Recycle connections every hour
+            # Performance optimizations
+            echo=False  # Set to True for debugging
+        )
+        
+        # Apply SQLite-specific PRAGMA settings for performance
+        from sqlalchemy import event
+        
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            # Performance optimizations
+            cursor.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging
+            cursor.execute("PRAGMA synchronous=NORMAL")  # Faster than FULL
+            cursor.execute("PRAGMA cache_size=10000")  # 10MB cache
+            cursor.execute("PRAGMA temp_store=MEMORY")  # Temp tables in memory
+            cursor.execute("PRAGMA mmap_size=268435456")  # 256MB memory map
+            cursor.execute("PRAGMA optimize")  # Auto-optimize
+            cursor.close()
+    else:
+        # PostgreSQL/other database configuration
+        engine = create_engine(
+            settings.DATABASE_URL,
+            pool_size=10,
+            max_overflow=20,
+            pool_pre_ping=True,
+            pool_recycle=300
+        )
 else:
     # Development configuration
-    engine = create_engine(settings.DATABASE_URL)
+    engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args={"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

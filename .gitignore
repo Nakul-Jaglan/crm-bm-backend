@@ -88,6 +88,7 @@ celerybeat-schedule
 
 # Environments
 .env
+.env.production
 .venv
 env/
 venv/
@@ -187,3 +188,13 @@ coverage.xml
 
 # Profiling
 *.prof
+
+# Database files (SQLite)
+*.db
+*.sqlite
+*.sqlite3
+crm_database.*
+crm_production.*
+
+# Data directory for production
+data/
