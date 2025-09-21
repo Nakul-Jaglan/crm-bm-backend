@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: crm-backend
+    runtime: python3
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./start_render.sh
+    plan: free
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:///./data/crm_production.sqlite3
+      - key: CORS_ORIGINS
+        value: "*"

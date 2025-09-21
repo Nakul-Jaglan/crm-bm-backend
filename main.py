@@ -31,28 +31,34 @@ def startup_event():
         # Ensure data directory exists for SQLite
         import os
         os.makedirs("data", exist_ok=True)
+        print("📁 Data directory created/verified")
         
         # Create all tables
         Base.metadata.create_all(bind=engine)
         print("✅ Database tables created/verified")
         
-        # Check if we need to seed data
-        db = next(get_db())
+        # Check if we need to seed data (but don't hang if it fails)
         try:
-            user_count = db.query(User).count()
-            if user_count == 0:
-                print("🌱 No users found. Seeding initial data...")
-                # Import and run seed function
-                from seed_data import main as seed_main
-                seed_main()
-                print("✅ Initial data seeded successfully!")
-            else:
-                print(f"👥 Found {user_count} users. Database already initialized.")
-        finally:
-            db.close()
+            db = next(get_db())
+            try:
+                user_count = db.query(User).count()
+                if user_count == 0:
+                    print("🌱 No users found. Seeding initial data...")
+                    # Import and run seed function
+                    from seed_data import main as seed_main
+                    seed_main()
+                    print("✅ Initial data seeded successfully!")
+                else:
+                    print(f"👥 Found {user_count} users. Database already initialized.")
+            finally:
+                db.close()
+        except Exception as seed_error:
+            print(f"⚠️ Seeding warning: {seed_error}")
+            print("🚀 Application will start without initial data")
             
     except Exception as e:
         print(f"❌ Database initialization error: {e}")
+        print("🚀 Application will start anyway")
         # Don't fail the startup, but log the error
         import traceback
         traceback.print_exc()
